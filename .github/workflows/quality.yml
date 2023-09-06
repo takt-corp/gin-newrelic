@@ -1,0 +1,64 @@
+name: Quality Check
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - develop
+
+env:
+  GOPRIVATE: github.com/takt-corp/*
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - uses: actions/checkout@v3
+      - run: |
+          git config --global url."https://takt-engineering-bot:${{ secrets.BOT_TOKEN }}@github.com".insteadOf "https://github.com"
+          git config --global user.email "takt-engineering-bot@takt.io"
+          git config --global user.name "Takt Engineering Bot"
+
+      - uses: actions/setup-go@v4
+        with:
+          check-latest: true
+
+      - uses: golangci/golangci-lint-action@v3
+
+      - run: make ci
+
+      - uses: slackapi/slack-github-action@v1.24.0
+        if: ${{ failure() }}
+        with:
+          channel-id: ${{ vars.SLACK_BOT_CHANNEL_ID }}
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":rotating_light: Quality check error for ${{ github.repository }} from commit `${{ github.ref_name }}/${{ github.sha }}`"
+                  },
+                  "accessory": {
+                    "type": "button",
+                    "text": {
+                      "type": "plain_text",
+                      "text": "View Run",
+                      "emoji": true
+                    },
+                    "value": "action_run",
+                    "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                    "action_id": "button-view-run"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ vars.SLACK_BOT_TOKEN }}
